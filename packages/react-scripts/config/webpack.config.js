@@ -84,6 +84,16 @@ const hasJsxRuntime = (() => {
   }
 })();
 
+function getOverrides(overrideFile) {
+  const overrideFileExists = fs.existsSync(overrideFile);
+  const overrides = overrideFileExists ? require(overrideFile) : {};
+  return {
+    overrideApplicationBabelConfig: c => c,
+    overrideESLintConfig: c => c,
+    ...overrides,
+  };
+}
+
 // This is the production and development configuration.
 // It is focused on developer experience, fast rebuilds, and a minimal bundle.
 module.exports = function (webpackEnv) {
@@ -164,6 +174,16 @@ module.exports = function (webpackEnv) {
     }
     return loaders;
   };
+
+  const variablesToPassToOverrides = {
+    webpackEnv,
+    paths,
+    modules,
+    getClientEnvironment,
+  };
+
+  const overrideFile = path.join(paths.appPath, 'cra.config.js');
+  const { overrideApplicationBabelConfig, overrideESLintConfig } = getOverrides(overrideFile);
 
   return {
     mode: isEnvProduction ? 'production' : isEnvDevelopment && 'development',
@@ -398,7 +418,7 @@ module.exports = function (webpackEnv) {
             },
             // Process application JS with Babel.
             // The preset includes JSX, Flow, TypeScript, and some ESnext features.
-            {
+            overrideApplicationBabelConfig({
               test: /\.(js|mjs|jsx|ts|tsx)$/,
               include: paths.appSrc,
               loader: require.resolve('babel-loader'),
@@ -458,7 +478,7 @@ module.exports = function (webpackEnv) {
                 cacheCompression: false,
                 compact: isEnvProduction,
               },
-            },
+            }, variablesToPassToOverrides),
             // Process any JS outside of the app with Babel.
             // Unlike the application JS, we only compile the standard ES features.
             {
@@ -750,7 +770,7 @@ module.exports = function (webpackEnv) {
           // The formatter is invoked directly in WebpackDevServerUtils during development
           formatter: isEnvProduction ? typescriptFormatter : undefined,
         }),
-      new ESLintPlugin({
+      new ESLintPlugin(overrideESLintConfig({
         // Plugin options
         extensions: ['js', 'mjs', 'jsx', 'ts', 'tsx'],
         formatter: require.resolve('react-dev-utils/eslintFormatter'),
@@ -768,7 +788,7 @@ module.exports = function (webpackEnv) {
             }),
           },
         },
-      }),
+      }, variablesToPassToOverrides)),
     ].filter(Boolean),
     // Some libraries import Node modules but don't use them in the browser.
     // Tell webpack to provide empty mocks for them so importing them works.
